@@ -358,7 +358,39 @@ end
 md"## The algorithm"
 
 # ╔═╡ c6db5f72-a8fa-481c-85e9-7c587e0589b4
+cm"""
+### Initialization
+- Let ``w_i, 1\leq i\leq l`` be __extreme directions__ of ``C^+`` and
+```math
+x_i = \operatorname{solution}\; \text{WSw}_i, \quad \text{for }i \in \{1,2,\cdots, l\}.
+```
+- Let ``\displaystyle \overline{\Omega}_0=\{x_1,\cdots,x_l\}``.
+- Compute the initial outer approximation ``P_0`` of ``\mathcal{P}`` as follows
+```math
+P_0 = \bigcap_{i=1}^l \mathcal{H}_i = \bigcap_{i=1}^l \left\{y\in \mathbb{R}^m\;|\; w_i^Ty\geq w_i^Tf(x_i)\right\} 
+```
+- Compute the set of vertices ``V_0`` of ``P_0``.
+- Let ``V_{\text{used}}=\emptyset`` be the set of used (visited) vertices.
 
+### Main Loop (k):
+Let ``V_k`` be the set of vertices of the current outer approximation ``P_k``.
+
+__While ``V_k \setminus V_{\text{used}}\not=\emptyset`` do__
+
+- __Choose an unused vertex__ ``v \in V_k \setminus V_{\text{used}}``.
+- __Choose a direction__ ``d_v \in \operatorname{int} C`` 
+- __Solve ``PS(v,d_v)`` and ``DPS(v,d_v)``__ and
+```math
+\begin{array}{rcl}
+x_v, z_v &=& \operatorname{solution pair}\; \text{PS(v,d}_v\text{)}.\\
+w_v &=& \operatorname{solution}\; \text{D-PS(c,d}_v\text{)}.\\
+\end{array}
+```
+
+- Update: ``V_{\text{used}}=V_{\text{used}}\bigcup \{v\}, \quad \overline{\Omega}_k=\overline{\Omega}_k \bigcup \{x_v\}``. 
+
+ 
+"""
 
 # ╔═╡ 34c3882f-2178-40f8-80b8-e3f019e5284e
 begin
@@ -739,7 +771,7 @@ C \quad \text{is a polyhedral}.
 ```
 So its dual cone is given by 
 ```math
-C^{+}:=\operatorname{coconv}\left\{w^1, \ldots, w^l\right\}, 
+C^{+}:=\operatorname{co conv}\left\{w^1, \ldots, w^l\right\}, 
 ``` 
 and ``\mathcal{\Omega}`` is compact with nonempty interior.
 $(ebl())
@@ -747,10 +779,18 @@ $(ebl())
 $(define("Polyhedral Convex Set"))
 A set ``S\in\mathbb{R}^m`` is a __polyhedral convex set__ if it is of the form 
 ```math
-S=\left\{y \in \mathbb{R}^m \mid A^T y \geq b\right\},
+S=\left\{y \in \mathbb{R}^m \mid A^T y \geq b\right\},\quad \color{red}{\text{Halfspace representation (H-representation)}}
 ```
 where ``A \in`` ``\mathbb{R}^{m \times n}, b \in \mathbb{R}^n``. 
 $(ebl())
+
+__Note__:
+
+``S`` can also be represented as 
+```math
+S = \operatorname{conv} V + \operatorname{co} D\quad \color{red}{\text{Vertix representation (V-representation)}}
+```
+where ``V \subseteq \mathbb{R}^m`` and ``D \subseteq \mathbb{R}^m`` are the finite sets of vertices and extreme directions of ``S``, respectively.
 
 $(define("Upper Image"))
 The upper image for probem (P) is defined as 
@@ -768,7 +808,10 @@ cm"""
 $(ex("Remarks",""))
 - Note that 
 ```math
-\mathbb{R}^m_+=\left\{y \in \mathbb{R}^m \mid I y \geq \mathbf{0}\right\},
+\begin{array}{lcl}
+\mathbb{R}^m_+&=&\left\{y \in \mathbb{R}^m \mid I y \geq \mathbf{0}\right\},\\
+&=&\left\{\mathbf{0}\right\}+\operatorname{co}\left\{e_1,e_2,\cdots,e_m\right\},\\
+\end{array}
 ```
 - ``\mathcal{P}`` is a closed convex set and under the assumptions of the problem, 
 ```math
@@ -983,7 +1026,7 @@ example-box {
 # ╟─a5bde7fe-472a-46e5-9cab-494e9c945493
 # ╟─f9a1dfe1-bc71-42c4-a6e8-3f422eba7507
 # ╟─e3f5835c-18fc-4f00-92f5-e55598e68081
-# ╠═c6db5f72-a8fa-481c-85e9-7c587e0589b4
+# ╟─c6db5f72-a8fa-481c-85e9-7c587e0589b4
 # ╠═34c3882f-2178-40f8-80b8-e3f019e5284e
 # ╟─59a80010-21a8-11f0-2aaa-5528a16a7081
 # ╟─66ffc650-93e6-4705-8212-7958f75bb1e1
