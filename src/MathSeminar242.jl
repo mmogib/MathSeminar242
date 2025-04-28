@@ -4,6 +4,18 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    #! format: off
+    return quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+    #! format: on
+end
+
 # ╔═╡ 59a80010-21a8-11f0-2aaa-5528a16a7081
 begin
 	
@@ -14,7 +26,8 @@ begin
 	using CommonMark
 	using PlutoUI
 	using LaTeXStrings, Latexify, HypertextLiteral, Colors
-	using LinearAlgebra
+	using LinearAlgebra, Dates
+	using JuMP, Ipopt
 	md"``\color{white}{\text{Packages}}``"
 end
 
@@ -26,120 +39,17 @@ md"# Approximating Convex Vector Optimization Solutions"
 
 # ╔═╡ 8c4c7c31-e590-4ff5-bc7b-f14d15293980
 cm"""
-This seminar provides an accessible introduction to scalarization techniques for approximating solutions of convex vector optimization problems. After motivating the general convex vector‐optimization framework and its “upper image,” we review key definitions—C-convexity, minimal and weakly minimal elements, polyhedral cones, and ε-solutions—through intuitive examples. 
-
-Emphasis is placed on clear geometric interpretation and practical implementation, making these techniques readily approachable for newcomers. 
-
-We conclude by sketching promising research directions: handling unbounded vector problems and establishing precise rates of convergence for these algorithms, with an eye toward both theoretical guarantees and computational efficiency.
+This seminar provides an accessible introduction to scalarization techniques for approximating solutions of convex vector optimization problems. After motivating the general convex vector‐optimization framework and its “upper image,” we review key definitions—C-convexity, minimal and weakly minimal elements, polyhedral cones, and ε-solutions—through intuitive examples. Emphasis is placed on clear geometric interpretation and practical implementation. We conclude by discussing promising research directions: handling unbounded vector problems and establishing precise rates of convergence for these algorithms.
 """
 
 # ╔═╡ dc6dbd80-444f-4697-ad54-476b16cd5fe6
 md"## The Problem"
 
-# ╔═╡ 9f14a6ae-8756-4059-a984-3b935ff598a0
-let
-	# Pick a theme
-	theme(:wong2)
-	
-	# Disk parameters
-	radius = 1.0
-	xc, yc = 1.0, 1.0
-	
-	# Parameterize the boundary circle
-	θ = LinRange(0, 2π, 200)
-	x = xc .+ radius .* cos.(θ)
-	y = yc .+ radius .* sin.(θ)
-	
-	# Draw the filled disk
-	plot(
-	    x, y;
-	    seriestype   = :shape,      # draw as a filled polygon
-	    fillcolor    = :skyblue,    # fill color
-	    fillalpha    = 0.4,         # transparency
-	    linecolor    = :blue,       # boundary color
-	    linewidth    = 0.5,
-	    aspect_ratio = :equal,      # equal scaling on x and y
-	    legend       = false,
-	    xlabel       = "x",
-	    ylabel       = "y",
-	    title        = L"f(\Omega)=\Omega",
-		frame_style  = :origin
-	)
-	θ = LinRange(π, 3π/2, 100)
-	x = xc .+ radius .* cos.(θ)
-	y = yc .+ radius .* sin.(θ)
-	scatter!(
-	    x, y;
-	    color    	 = :green,       # boundary color
-	    markersize 	 = 2,
-	    aspect_ratio = :equal,      # equal scaling on x and y
-	    legend       = false,
-	    # xlabel       = none,
-	    # ylabel       = nothing,
-	    frame_style  = :origin
-	)
-	# # Optionally mark the center
-	# scatter!([xc], [yc];
-	#     color   = :red,
-	#     marker  = :circle,
-	#     markersize = 6,
-	#     label   = "Center"
-	# )
-end	
+# ╔═╡ c84c7d54-89b8-481e-9b2b-26ede92942f6
+md"## Example"
 
 # ╔═╡ 764259e7-1d76-495b-8553-89f72caf3e46
 cm"## Definitions and Background"
-
-# ╔═╡ d9c32ddb-9922-4b73-882d-bc353e0dd761
-let
-	# pick a theme
-	theme(:wong2)
-	
-	# 1) rectangle = positive‐orthant truncated to [0,2]×[0,2]
-	rect_x1 = [1.0, 3.0, 3.0, 1.0]
-	rect_y1 = [0.0, 0.0, 3.0, 3.0]
-	rect_x2 = [0.0, 3.0, 3.0, 0.0]
-	rect_y2 = [1.0, 1.0, 3.0, 3.0]
-	
-	# 2) circle = unit‐disk centered at (1,1)
-	xc, yc, r = 1.0, 1.0, 1.0
-	θ = range(0, 2π, length=300)
-	circ_x = xc .+ r * cos.(θ)
-	circ_y = yc .+ r * sin.(θ)
-	
-	# 3) start the plot by drawing the rectangle
-	p = plot(
-	    [(rect_x1, rect_y1),(rect_x2, rect_y2)],
-	    seriestype   = :shape,
-	    fillcolor    = :darkgray,
-	    fillalpha    = 1,
-	    linecolor    = :transparent,
-	    label        = "",
-	    xlims        = (-0.2, 3.2),
-	    ylims        = (-0.2, 3.2),
-	    aspect_ratio = :equal,
-	    xlabel       = L"f_1",
-	    ylabel       = L"f_2",
-	    legend       = false,
-	    grid         = false,
-		frame_style  = :origin
-	)
-	
-	# 4) overlay the filled disk
-	plot!(
-	    p, circ_x, circ_y,
-	    seriestype   = :shape,
-	    fillcolor    = :gray,
-	    fillalpha    = 1,
-	    linecolor    = :gray,
-	    linewidth    = 1.5,
-	    label        = "",
-	)
-	
-	# 5) add the two text labels
-	annotate!(p, 1.0, 1.0, text(L"f(\mathcal{\Omega})", :center, 14))
-	annotate!(p, 1.8, 1.8, text(L"\mathcal{P}=f(\Omega)+\mathbb{R}^2_+",    :left,   12))	
-end
 
 # ╔═╡ 1c060d79-1857-495b-994a-90273540afde
 md"## Solutions Methods"
@@ -184,91 +94,6 @@ In what follows, we need the Lagrange dual of (PS(v,d)) which is give by
 \end{array}\tag{DPS(v,d)}
 ```
 """
-
-# ╔═╡ a5bde7fe-472a-46e5-9cab-494e9c945493
-let
-	# pick a theme
-	theme(:wong2)
-	
-	# 1) rectangle = positive‐orthant truncated to [0,2]×[0,2]
-	rect_x1 = [1.0, 3.0, 3.0, 1.0]
-	rect_y1 = [0.0, 0.0, 3.0, 3.0]
-	rect_x2 = [0.0, 3.0, 3.0, 0.0]
-	rect_y2 = [1.0, 1.0, 3.0, 3.0]
-	
-	# 2) circle = unit‐disk centered at (1,1)
-	xc, yc, r = 1.0, 1.0, 1.0
-	θ = range(0, 2π, length=300)
-	circ_x = xc .+ r * cos.(θ)
-	circ_y = yc .+ r * sin.(θ)
-	
-	# 3) start the plot by drawing the rectangle
-	p = plot(
-	    [(rect_x1, rect_y1),(rect_x2, rect_y2)],
-	    seriestype   = :shape,
-	    fillcolor    = :darkgray,
-	    fillalpha    = 1,
-	    linecolor    = :transparent,
-	    label        = "",
-	    xlims        = (-0.2, 3.2),
-	    ylims        = (-0.2, 3.2),
-	    aspect_ratio = :equal,
-	    xlabel       = L"f_1",
-	    ylabel       = L"f_2",
-	    legend       = false,
-	    grid         = false,
-		frame_style  = :origin
-	)
-	
-	# 4) overlay the filled disk
-	plot!(
-	    p, circ_x, circ_y,
-	    seriestype   = :shape,
-	    fillcolor    = :gray,
-	    fillalpha    = 1,
-	    linecolor    = :gray,
-	    linewidth    = 1.5,
-	    label        = "",
-	)
-	θ_t = π/4
-	d = [cos(θ_t), sin(θ_t)]  # points toward the center
-	quiver!(p, [0.0], [0.0],
-	    quiver      = ([d[1]], [d[2]]),
-	    arrow       = true,
-	    linewidth   = 1.2,
-	    linecolor   = :blue,
-	    linestyle   = :dashdot,
-	)
-
-	scatter!(p, [0.0], [0.0];
-	    color      = :black,
-	    markersize = 4,
-	)
-	p_x = xc + r*cos(θ_t+π)
-	p_y = yc + r*sin(θ_t+π)
-	b = dot(d, [p_x, p_y])
-	xs = [-0.2, 2.6]
-	ys = (b .- d[1]*xs) ./ d[2]
-	plot!(p, xs, ys;
-	    linecolor  = :red,
-	    linestyle  = :dash,
-	    linewidth  = 2,
-	)
-	pt_x, pt_y = b/d[1], b/d[2]
-	scatter!(p, [pt_x, 0.0], [0.0, pt_y];
-	    color      = :red,
-	    markersize = 4,
-	)
-	
-	# 5) add the two text labels
-	p_x = xc/8 + r*cos(θ_t)
-	p_y = yc/12 + r*sin(θ_t)
-	annotate!(p, 1.0, 1.2, text(L"f(\mathcal{\Omega})", :center, 14))
-	annotate!(p, 2.8, 2.8, text(L"\mathcal{P}",    :left,   12))
-	annotate!(p, p_x,  p_y,  text(L"d",             :blue, 14))
-	annotate!(p, -0.3,  -.1,  text(L"v=\mathbf{0}",             14))
-	annotate!(p, -0.3,  .61,  text(L"H",      :red,       14))
-end
 
 # ╔═╡ f9a1dfe1-bc71-42c4-a6e8-3f422eba7507
 # let
@@ -360,6 +185,8 @@ md"## The algorithm"
 # ╔═╡ c6db5f72-a8fa-481c-85e9-7c587e0589b4
 cm"""
 ### Initialization
+<div style="font-size:1.5em;line-height:2.5em;">
+
 - Let ``w_i, 1\leq i\leq l`` be __extreme directions__ of ``C^+`` and
 ```math
 x_i = \operatorname{solution}\; \text{WSw}_i, \quad \text{for }i \in \{1,2,\cdots, l\}.
@@ -386,11 +213,137 @@ x_v, z_v &=& \operatorname{solution pair}\; \text{PS(v,d}_v\text{)}.\\
 w_v &=& \operatorname{solution}\; \text{D-PS(c,d}_v\text{)}.\\
 \end{array}
 ```
-
 - Update: ``V_{\text{used}}=V_{\text{used}}\bigcup \{v\}, \quad \overline{\Omega}_k=\overline{\Omega}_k \bigcup \{x_v\}``. 
-
- 
+- If ``z_v> \epsilon`` then
+  - Compute ``\mathcal{H} = \left\{y\in \mathbb{R}^m\;|\; w_v^Ty\geq w_v^Tv+z_v\right\}``
+  - Update ``P_{k+1} = P_k \bigcap \mathcal{H},\quad \overline{\Omega}_{k+1}=\overline{\Omega}_{k}``
+  - Compute the set of vertices ``V_{k+1}`` of ``P_{k+1}``.
+  - ``k = k + 1``
+</div>
 """
+
+# ╔═╡ 574605cb-46c1-4470-b4aa-b4a5e6fe6f8a
+md"""
+## Solving the Example 
+"""
+
+# ╔═╡ 456f82ae-67de-4050-8d47-e1c106bdd5d1
+cm"""
+__Initialization__
+- Let ``w_1=(1,0), w_2=(0,1)`` be __extreme directions__ of ``C^+=\mathbb{R}^2_+`` and
+```math
+x_1 = (1,2), \quad x_2 = (2,1)
+```
+- Let ``\displaystyle \overline{\Omega}_0=\{x_1,x_2\}``.
+- Compute the initial outer approximation ``P_0`` of ``\mathcal{P}`` as follows
+```math
+\begin{array}{lcl}
+P_0 &=& \bigcap_{i=1}^2 \mathcal{H}_i = \bigcap_{i=1}^2 \left\{y\in \mathbb{R}^2\;|\; w_i^Ty\geq w_i^Tf(x_i)\right\} \\
+&=&\{(x,y)\in \mathbb{R}^2\;|\;x\geq 1\}\bigcap\{(x,y)\in \mathbb{R}^2\;|\;y\geq 1\}\\
+\end{array}
+```
+- Compute the set of vertices ``V_0`` of ``P_0``.
+```math
+V_0=\{(1,1)\}
+```
+- Let ``V_{\text{used}}=\emptyset`` be the set of used (visited) vertices.
+
+"""
+
+# ╔═╡ 22e078de-0f08-4dd9-bb15-333f5cd7f22b
+cm"__Run Algorithm__ step by step"
+
+# ╔═╡ b5d6e08e-318b-4f30-96c3-fe096f6da8dd
+begin
+	steps_ = @bind steps Radio(["1"=>"Initial", "2"=>"Iteration 1", "3"=>"Iteration 5"], default="1")
+	# cm"""
+	# __Run Algorithm__ step by step
+
+	# $(steps_)
+	# """
+end
+
+# ╔═╡ e4ed7740-d159-4d35-a50a-038cd7ac184b
+# let
+# 	# max(tr_corner_x,max_x)
+# 	xc,yc, r = 2.0,2.0,1.0
+# 	tr_corner_x,tr_corner_y=(6.4,5.0)
+# 	# X = [1.0  2.0  1.29289  1.6398   1.06712  1.55167
+#  # 2.0  1.0  1.29289  1.06712  1.6398   1.10613]
+# 	d = [1.0;1.0]
+# 	θ_t = π/4
+# 	v_x = xc + r*cos(θ_t+π)
+# 	v_y = yc + r*sin(θ_t+π)
+# 	v = [v_x;v_y]
+# 	b = dot(d,v)
+# 	xs = [1;(b .- d[2]*1) / d[1]]
+# 	ys = [(b .- d[1]*1) / d[2];1]
+# 	X = [xs';ys']
+# 	p = sortperm(X[1, :])  
+# 	X_sorted=X[:,p]
+# 	# p1 = draw_outer([v[1]],[v[2]],tr_corner=(6.4,5.0))
+# 	p1 = draw_outer(X_sorted[1,:],X_sorted[2,:],tr_corner=(6.4,5.0))
+# 	p = draw_example1(xc,yc, r; 
+# 					  upper_image=false,
+# 					  show_center=false,
+# 					  tr_corner=(tr_corner_x,tr_corner_y),
+# 					  initial_plot=p1
+# 					 )
+	
+# 	# 5) add the two text labels
+# 	annotate!(p, tr_corner_x-0.5, tr_corner_y-0.5, text(L"P_1", :center, 12))
+	
+# end
+
+# ╔═╡ a2d1d14d-c984-4cc6-9fc2-76365f3d9c2f
+# let
+# 	# max(tr_corner_x,max_x)
+# 	xc,yc, r = 2.0,2.0,1.0
+# 	tr_corner_x,tr_corner_y=(6.4,5.0)
+# 	X = [1.0  2.0  1.29289  1.6398   1.06712  1.55167
+#  2.0  1.0  1.29289  1.06712  1.6398   1.10613]
+# 	p = sortperm(X[1, :])  
+# 	X_sorted=X[:,p]
+# 	p1 = draw_outer(X_sorted[1,:],X_sorted[2,:],tr_corner=(6.4,5.0))
+# 	p = draw_example1(xc,yc, r; 
+# 					  upper_image=false,
+# 					  show_center=false,
+# 					  tr_corner=(tr_corner_x,tr_corner_y),
+# 					  initial_plot=p1
+# 					 )
+	
+# 	# 5) add the two text labels
+# 	annotate!(p, tr_corner_x-0.5, tr_corner_y-0.5, text(L"P_5", :center, 12))
+	
+# end
+
+# ╔═╡ a631fd0c-b9b6-444a-8af9-7dbe8bc7fda4
+let
+	direction_selection = [
+	    :FixedDirection,
+	    :FixedPointDirection,
+	    :IdealPointDirection,
+	    :ApproximateAdjDirection,
+	  ]
+ 	vertex_selection = 
+		[
+			:RandomVertex, 
+			:IdealPointVertex, 
+			:InnerPointVertex
+		]
+	# examp1_option = ExampleOptions(2, 2, 0.05, 100, 5, 50, 30)
+	# dims = [2]
+	# res1 = example1(
+	#   dims,
+	#   examp1_option;
+	#   direction_selection = [:FixedDirection],
+	#   vertex_selection = [:InnerPointVertex],
+	# )
+	# res1[1].X
+	X = [1.0  2.0  1.29289  1.6398   1.06712  1.55167
+ 2.0  1.0  1.29289  1.06712  1.6398   1.10613]
+	md""
+end
 
 # ╔═╡ 34c3882f-2178-40f8-80b8-e3f019e5284e
 begin
@@ -408,58 +361,387 @@ begin
 	md""
 end
 
+# ╔═╡ d71e0ae6-a621-4738-9683-443b4043e371
+begin
+	struct ExampleOptions
+	  pdim::Int
+	  ddim::Int
+	  ϵ::Float64
+	  maxiters::Int
+	  trials::Int
+	  maxcard::Union{Nothing,Int}
+	  time_limit::Union{Nothing,Int}
+	end
+	ExampleOptions(pdim::Int) = ExampleOptions(pdim, pdim, 0.05, 1000, 1, nothing, nothing)
+	ExampleOptions(pdim::Int, ddim::Int) = ExampleOptions(pdim, ddim, 0.05, 1000, 1, nothing, nothing)
+	ExampleOptions(eo::ExampleOptions, pdim::Int, ddim::Int) =
+	  ExampleOptions(pdim, ddim, eo.ϵ, eo.maxiters, eo.trials, eo.maxcard, eo.time_limit)
+end
+
+# ╔═╡ 3c5c8346-86f7-4309-a476-43a35a50f8bc
+begin
+	
+
+function example1(
+  dims::Vector{Int},
+  optionts::ExampleOptions;
+  direction_selection::Vector{Symbol} = [
+    :FixedDirection,
+    :FixedPointDirection,
+    :IdealPointDirection,
+    :ApproximateAdjDirection,
+  ],
+  vertex_selection::Vector{Symbol} = [:RandomVertex, :IdealPointVertex, :InnerPointVertex],
+)
+  results = map(dims) do d
+    eo = ExampleOptions(optionts, d, d)
+    example1(eo, direction_selection = direction_selection, vertex_selection = vertex_selection)
+  end
+  vcat(results...)
+end
+
+function example1(
+  optionts::ExampleOptions;
+  direction_selection::Vector{Symbol} = [
+    :FixedDirection,
+    :FixedPointDirection,
+    :IdealPointDirection,
+    :ApproximateAdjDirection,
+  ],
+  vertex_selection::Vector{Symbol} = [:RandomVertex, :IdealPointVertex, :InnerPointVertex],
+)
+  pdim, ddim, ϵ, maxiters, trials, time_limit, maxcard = optionts.pdim,
+  optionts.ddim,
+  optionts.ϵ,
+  optionts.maxiters,
+  optionts.trials,
+  optionts.time_limit,
+  optionts.maxcard
+  direction_selection = symbolToDirection.(direction_selection)
+  vertex_selection = symbolToVertex.(vertex_selection)
+  solver = optimizer_with_attributes(
+    Ipopt.Optimizer,
+    MOI.Silent() => true,
+    "sb" => "yes",
+    "max_iter" => 10_000,
+  )
+  # (1) The function
+  f(x) = x
+  # (2) The matrix whose columns generate C
+  Z = Float64.(Matrix(I(ddim)))  # generating C
+  C = NMCone(Z)
+  # (3) The matrix whose columns generate C+
+  Zplus = copy(Z) # generating C+
+  Cp = NMCone(Z)
+
+  # (4) direction inside C
+  d = ones(ddim)
+  d = d / norm(d)
+
+  # (5) Pascoletti-Serafini scalarization
+  function ps(v::Vector{<:Number}, d::Vector{<:Number})
+    model = Model(solver)
+    @variable(model, z)
+    @variable(model, x[1:pdim] >= 0)
+    @NLconstraint(model, sum((x[i] - 2)^2 for i = 1:pdim) <= 1)
+    @constraint(model, Zplus * (v + z * d - f(x)) .>= 0)
+    @objective(model, Min, z)
+    optimize!(model)
+    if (has_values(model))
+      xv = value.(x)
+      return xv, value.(z)
+    else
+      return nothing
+    end
+  end
+
+  # (6) To find the realized approximation error is dH(P K, P)
+  function ps2(v::Vector{<:Number})
+    model = Model(solver)
+    @variable(model, z[1:ddim])
+    @variable(model, x[1:pdim] >= 0)
+    @NLconstraint(model, sum((x[i] - 2)^2 for i = 1:pdim) <= 1)
+    @constraint(model, Zplus * (v + z - f(x)) .>= 0)
+    @NLobjective(model, Min, sum(z[i]^2 for i = 1:ddim))
+    optimize!(model)
+    if (has_values(model))
+      return norm(value.(z))
+    else
+      return nothing
+    end
+  end
+
+  # (7) The Lagrange dual of the PS problem
+  function dps(v::Vector{<:Number}, d::Vector{<:Number})
+    model = Model(solver)
+    @variable(model, t)
+    @variable(model, x[1:pdim] >= 0)
+    @variable(model, w[1:ddim])
+    @constraint(model, dot(w, d) == 1)
+    @constraint(model, Z * w .>= 0)
+    @NLconstraint(model, sum((x[i] - 2)^2 for i = 1:pdim) <= 1)
+    @constraint(model, dot(f(x), w) >= t)
+    @objective(model, Max, t - dot(w, v))
+    optimize!(model)
+    if (has_values(model))
+      return value.(w)
+    else
+      return nothing
+    end
+  end
+
+  # (8) the weighted sum scalarization
+  function ws(w::Vector{<:Number})
+    model = Model(solver)
+    @variable(model, x[1:pdim] >= 0)
+    @NLconstraint(model, sum((x[i] - 2)^2 for i = 1:pdim) <= 1)
+    @objective(model, Min, dot(w, f(x)))
+    optimize!(model)
+    if (has_values(model))
+      return value.(x)
+    else
+      return nothing
+    end
+  end
+
+  # (9) Get the ideal point using the weighted sum scalarization
+  function getIdealPoint()
+    yI = map(1:ddim) do j
+      model = Model(solver)
+      @variable(model, x[1:pdim] >= 0)
+      @NLconstraint(model, sum((x[i] - 2)^2 for i = 1:pdim) <= 1)
+      @objective(model, Min, f(x)[j])
+      optimize!(model)
+      if (has_values(model))
+        xv = value.(x)
+        return xv[j]
+      else
+        return nothing
+      end
+    end
+    return yI
+  end
+
+  # (10) The ideal point   
+  yI = abs.(getIdealPoint())
+  # (11) The problem 
+  problem = MOAProblem(pdim, ddim, C, Cp, f, ws, ps, dps, d, yI)
+
+  # array to hold the results
+  results = Vector{MOASuccessResult}(undef, length(direction_selection) * length(vertex_selection))
+
+  i = 0
+  for vertex in vertex_selection
+    tries, average_it = (Symbol(vertex) == :RandomVertex) ? (trials, true) : (1, false)
+    printstyled("Staring $(String(Symbol(vertex))) with $tries tries.\n", color = :light_magenta)
+    printstyled("=========================================\n", color = :blue)
+    tries
+    for direction in direction_selection
+      printstyled(
+        "---- with $(String(Symbol(direction))) direction selection .\n",
+        color = :light_magenta,
+      )
+      total_trial_counter = 0
+      success_trial_counter = 0
+      Xs = Vector{MOASuccessResult}(undef, tries)
+      while true
+        if total_trial_counter > 20 * tries
+          printstyled("Could not find $tries successful results.\n", color = :red)
+          break
+        end
+        if success_trial_counter == tries
+          break
+        end
+        t1 = Dates.now()
+        options = MOAOptions(
+          ϵ,
+          maxiters,
+          (c, card) -> begin
+            cond_iters = c >= maxiters
+            cond_card = isnothing(maxcard) ? false : card >= maxcard
+            cond_time = if isnothing(time_limit)
+              false
+            else
+              t2 = Dates.now()
+              return round(t2 - t1, Second) > Second(time_limit)
+            end
+            return cond_iters || cond_card || cond_time
+          end,
+        )
+        X, t = @timed paa(direction, vertex, problem, options)
+        if isa(X, MOASuccessResult)
+          success_trial_counter += 1
+          printstyled(
+            "Got a successfull result $success_trial_counter with message $(X.message).\n",
+            color = :blue,
+          )
+          V, = getVertices(X.Pk)
+          hdist1 = hausdorffDistance(V, ps2)
+          # hdist2 = hausdorffDistance(X.Vk, PS_distance(Z, f, n, n, solver))
+          # printstyled("distance 1 = $hdist1 and distance 2 = $hdist2\n")
+          X = MOASuccessResult(X, String(Symbol(direction)), String(Symbol(vertex)), t)
+          Xs[success_trial_counter] = MOASuccessResult(X, t, hdist1)
+
+        end
+        total_trial_counter += 1
+      end
+      if average_it
+        name = MOAResultName(String(Symbol(direction)), String(Symbol(vertex)))
+        R = MOASuccessResult(
+          name,
+          Xs[tries].message,
+          Xs[tries].X,
+          Xs[tries].Vk,
+          Xs[tries].Pk,
+          mean([r.SC for r in Xs]),
+          mean([r.Card for r in Xs]),
+          mean([r.T for r in Xs]),
+          mean([r.HD for r in Xs]),
+          problem,
+        )
+        i = i + 1
+        results[i] = R
+      else
+        results[i+1:i+tries] = Xs
+        i = i + tries
+      end
+    end
+  end
+
+  return results
+end
+end
+
+# ╔═╡ d899a2e5-ed49-4bee-9dad-a7934ea5d560
+begin
+	function draw_example1(xc=2.0, yc=2.0, radius=1.0; 
+						   upper_image=true, 
+						   tr_corner=(5.0,5.0),
+						   show_center=true,
+						   pareto_front=false,
+						   initial_plot=plot(),
+						   title=""
+						  )
+			# Pick a theme
+		theme(:wong2)
+		tr_corner_x,tr_corner_y = tr_corner
+		
+		# Parameterize the boundary circle
+		θ = LinRange(0, 2π, 200)
+		x = xc .+ radius .* cos.(θ)
+		y = yc .+ radius .* sin.(θ)
+		p = if upper_image
+			rect_x1 = [xc, tr_corner_x, tr_corner_x, xc]
+			rect_y1 = [yc-radius, yc-radius, tr_corner_y, tr_corner_y]
+			rect_x2 = [xc-radius, tr_corner_x, tr_corner_x, xc-radius]
+			rect_y2 = [yc, yc, tr_corner_y, tr_corner_y]
+			the_cone = [
+				Shape(rect_x1,rect_y1),
+				Shape(rect_x2,rect_y2),
+			]
+			plot(the_cone,
+					 seriestype   = :shape,
+					 fillcolor    =:darkgrey, 
+					 fillalpha    = 1.0,
+					 linecolor    = :transparent,
+					)
+			else
+				initial_plot
+			end
+		# Draw the filled disk
+		p = plot(p,
+		    x, y;
+		    seriestype   = :shape,      # draw as a filled polygon
+		    fillcolor    = :gray,    # fill color
+		    fillalpha    = 1.0,         # transparency
+		    linecolor    = :gray,       # boundary color
+		    linewidth    = 1.5,
+			aspect_ratio = :equal,      # equal scaling on x and y
+		    legend       = false,
+		    xlabel       = "x",
+		    ylabel       = "y",
+		    title        = title,
+			frame_style  = :origin
+		)
+		if pareto_front
+		θ = LinRange(π, 3π/2, 100)
+		x = xc .+ radius .* cos.(θ)
+		y = yc .+ radius .* sin.(θ)
+		scatter!(
+		    x, y;
+		    color    	 = :green,       # boundary color
+		    markersize 	 = 2,
+		    aspect_ratio = :equal,      # equal scaling on x and y
+		    legend       = false,
+		    # xlabel       = none,
+		    # ylabel       = nothing,
+		    frame_style  = :origin
+		)
+		end
+		# Optionally mark the center
+		if show_center
+		scatter!([xc], [yc];
+		    color   = :red,
+		    marker  = :circle,
+		    markersize = 2,
+		)
+		annotate!(p, xc, yc, text(L"(2,2)", :center, 14))
+		end
+		p
+	end
+	function draw_outer(xs,ys;tr_corner=(5.0,5.0))
+		min_x, max_x = minimum(xs), maximum(xs)
+		min_y, max_y = minimum(ys), maximum(ys)
+		tr_corner_x,tr_corner_y = tr_corner
+		Pk = Shape(
+			[xs...,max(max_x,tr_corner_x),max(max_x,tr_corner_x),min_x],
+			[ys...,min_y,tr_corner_y,tr_corner_y]
+		)
+		p = plot(Pk,
+				seriestype   = :shape,
+				fillcolor    =:darkgrey, 
+				fillalpha    = 1.0,
+				linecolor    = :transparent,
+				label = ""
+		)
+		p = scatter(p,xs,ys,
+				 label = ""
+				   )
+		p
+	end
+end
+
+# ╔═╡ 9f14a6ae-8756-4059-a984-3b935ff598a0
+let
+	draw_example1(upper_image=false,title=L"f(\Omega)=\Omega",pareto_front=true)
+end	
+
+# ╔═╡ d9c32ddb-9922-4b73-882d-bc353e0dd761
+let
+	xc,yc, r = 2.0,2.0,1.0
+	p = draw_example1(xc,yc, r;show_center=false,title="Upper Image")
+	annotate!(p, xc, yc+0.5, text(L"f(\mathcal{\Omega})", :center, 14))
+	annotate!(p, xc+0.6, yc + 1.2, text(L"\mathcal{P}=f(\Omega)+\mathbb{R}^2_+",    :left,   14))
+			
+end
+
 # ╔═╡ a707080d-33ef-4dda-b2a3-72a23dc90db3
 let
 	# pick a theme
-	theme(:wong2)
+	# theme(:wong2)
+	xc,yc, r = 2.0,2.0,1.0
+	tr_corner_x,tr_corner_y=(6.4,5.0)
+	p = draw_example1(xc,yc, r; 
+					  show_center=false,
+					  tr_corner=(tr_corner_x,tr_corner_y)
+					 )
 	
-	# 1) rectangle = positive‐orthant truncated to [0,2]×[0,2]
-	rect_x1 = [1.0, 3.5, 3.5, 1.0]
-	rect_y1 = [0.0, 0.0, 3.5, 3.5]
-	rect_x2 = [0.0, 3.5, 3.5, 0.0]
-	rect_y2 = [1.0, 1.0, 3.5, 3.5]
-	
-	# 2) circle = unit‐disk centered at (1,1)
-	xc, yc, r = 1.0, 1.0, 1.0
-	θ = range(0, 2π, length=300)
-	circ_x = xc .+ r * cos.(θ)
-	circ_y = yc .+ r * sin.(θ)
-	
-	# 3) start the plot by drawing the rectangle
-	p = plot(
-	    [(rect_x1, rect_y1),(rect_x2, rect_y2)],
-	    seriestype   = :shape,
-	    fillcolor    = :darkgray,
-	    fillalpha    = 1,
-	    linecolor    = :transparent,
-	    label        = "",
-	    xlims        = (-0.5, 3.5),
-	    ylims        = (-0.5, 3.5),
-	    aspect_ratio = :equal,
-	    xlabel       = L"f_1",
-	    ylabel       = L"f_2",
-	    legend       = false,
-	    grid         = false,
-		frame_style  = :origin
-	)
-	
-	# 4) overlay the filled disk
-	plot!(
-	    p, circ_x, circ_y,
-	    seriestype   = :shape,
-	    fillcolor    = :gray,
-	    fillalpha    = 1,
-	    linecolor    = :gray,
-	    linewidth    = 1.5,
-	    label        = "",
-	)
-
 	# 5) add the two text labels
-	annotate!(p, 1.0, 1.0, text(L"f(\mathcal{\Omega})", :center, 14))
+	annotate!(p, xc, yc+0.5, text(L"f(\mathcal{\Omega})", :center, 12))
 	
 	# 6) inner P
-	xs = [10.0, 1.0, 1-1/sqrt(2), 0.0, 0.0]
-	ys = [0.0, 0.0, 1-1/sqrt(2), 1.0, 10.0]
+	xs = [tr_corner_x, xc, xc-1/sqrt(2), xc-r, xc-r]
+	ys = [yc-r, yc-r, xc-1/sqrt(2), yc, tr_corner_y]
 	plot!(
 		    p, xs, ys,
 		    # seriestype   = :shape,
@@ -473,12 +755,11 @@ let
 			linestyle    = :dash,
 		    label        = "",
 		)
-	annotate!(p, 1.2, 2.8, text(L"\operatorname{bd}(\operatorname{conv} f(\overline{\Omega})+\mathbb{R}^2_+)",    :left,   12))	
-	
-	# 7) inner P
-	xs = [10.0, 1.0, 1-1/sqrt(2), 0.0, 0.0]
-	ys = [0.0, 0.0, 1-1/sqrt(2), 1.0, 10.0]
-	ϵ = 0.06
+
+	# 7) outer P
+	xs = [tr_corner_x, xc, xc-1/sqrt(2), xc-r, xc-r]
+	ys = [yc-r, yc-r, xc-1/sqrt(2), yc, tr_corner_y]
+	ϵ = 0.1
 	plot!(
 		    p, xs .- ϵ, ys .- ϵ,
 		    # seriestype   = :shape,
@@ -492,63 +773,27 @@ let
 			linestyle    = :dash,
 		    label        = "",
 		)
-	annotate!(p, 1.2, 2.8, text(L"\operatorname{bd}(\operatorname{conv} f(\overline{\Omega})+\mathbb{R}^2_+)",    :left,   12,"#483D8B"))	
-	annotate!(p, 1.2, 2.4, text(L"\operatorname{bd}(\operatorname{conv} f(\overline{\Omega})+\mathbb{R}^2_+ -\mathbb{1}\{\epsilon\})",    :left,   12,dark_palette[:dark_magenta]))	
+	annotate!(p, xc+0.4, yc+1.8, text(L"\operatorname{bd}(\operatorname{conv} f(\overline{\Omega})+\mathbb{R}^2_+)",    :left,   12,"#483D8B"))	
+	annotate!(p, xc+0.4, yc+1.4, text(L"\operatorname{bd}(\operatorname{conv} f(\overline{\Omega})+\mathbb{R}^2_+ -\mathbb{1}\{\epsilon\})",    :left,   12,dark_palette[:dark_magenta]))	
 end
 
 
 # ╔═╡ 5b0e766a-28fd-467d-8c70-717730ec47ef
 let
 	# pick a theme
-	theme(:wong2)
+	xc,yc, r = 2.0,2.0,1.0
+	tr_corner_x,tr_corner_y=(6.4,5.0)
+	p = draw_example1(xc,yc, r; 
+					  show_center=false,
+					  tr_corner=(tr_corner_x,tr_corner_y)
+					 )
 	
-	# 1) rectangle = positive‐orthant truncated to [0,2]×[0,2]
-	rect_x1 = [1.0, 3.5, 3.5, 1.0]
-	rect_y1 = [0.0, 0.0, 3.5, 3.5]
-	rect_x2 = [0.0, 3.5, 3.5, 0.0]
-	rect_y2 = [1.0, 1.0, 3.5, 3.5]
-	
-	# 2) circle = unit‐disk centered at (1,1)
-	xc, yc, r = 1.0, 1.0, 1.0
-	θ = range(0, 2π, length=300)
-	circ_x = xc .+ r * cos.(θ)
-	circ_y = yc .+ r * sin.(θ)
-	
-	# 3) start the plot by drawing the rectangle
-	p = plot(
-	    [(rect_x1, rect_y1),(rect_x2, rect_y2)],
-	    seriestype   = :shape,
-	    fillcolor    = :darkgray,
-	    fillalpha    = 1,
-	    linecolor    = :transparent,
-	    label        = "",
-	    xlims        = (-0.5, 3.5),
-	    ylims        = (-0.5, 3.5),
-	    aspect_ratio = :equal,
-	    xlabel       = L"f_1",
-	    ylabel       = L"f_2",
-	    legend       = false,
-	    grid         = false,
-		frame_style  = :origin
-	)
-	
-	# 4) overlay the filled disk
-	plot!(
-	    p, circ_x, circ_y,
-	    seriestype   = :shape,
-	    fillcolor    = :gray,
-	    fillalpha    = 1,
-	    linecolor    = :gray,
-	    linewidth    = 1.5,
-	    label        = "",
-	)
-
 	# 5) add the two text labels
-	annotate!(p, 1.0, 1.0, text(L"f(\mathcal{\Omega})", :center, 14))
+	annotate!(p, xc, yc+0.5, text(L"f(\mathcal{\Omega})", :center, 12))
 	
 	# 6) inner P
-	xs = [10.0, 1.0, 1-1/sqrt(2), 0.0, 0.0]
-	ys = [0.0, 0.0, 1-1/sqrt(2), 1.0, 10.0]
+	xs = [tr_corner_x, xc, xc-1/sqrt(2), xc-r, xc-r]
+	ys = [yc-r, yc-r, xc-1/sqrt(2), yc, tr_corner_y]
 	plot!(
 		    p, xs, ys,
 		    # seriestype   = :shape,
@@ -574,12 +819,10 @@ let
 		    # linecolor    = "#483D8B",
 		    label        = "",
 		)
-	annotate!(p, 1.2, 2.8, text(L"\operatorname{bd}(\operatorname{conv} f(\overline{\Omega})+\mathbb{R}^2_+)",    :left,   12))	
-	
-	# 7) inner P
-	xs = [10.0, 1.0, 1-1/sqrt(2), 0.0, 0.0]
-	ys = [0.0, 0.0, 1-1/sqrt(2), 1.0, 10.0]
-	ϵ = 0.06
+	# 7) outer P
+	xs = [tr_corner_x, xc, xc-1/sqrt(2), xc-r, xc-r]
+	ys = [yc-r, yc-r, xc-1/sqrt(2), yc, tr_corner_y]
+	ϵ = 0.1
 	plot!(
 		    p, xs .- ϵ, ys .- ϵ,
 		    # seriestype   = :shape,
@@ -593,10 +836,99 @@ let
 			linestyle    = :dash,
 		    label        = "",
 		)
-	annotate!(p, 1.2, 2.8, text(L"\operatorname{bd}(\operatorname{conv} f(\overline{\Omega})+\mathbb{R}^2_+)",    :left,   12,"#483D8B"))	
-	annotate!(p, 1.2, 2.4, text(L"\operatorname{bd}\left(\operatorname{conv} f(\overline{\Omega})+\mathbb{R}^2_+ +\mathbf{B}(\mathbf{0},\epsilon)\right)",    :left,   12,dark_palette[:dark_magenta]))	
+	annotate!(p, xc+0.4, yc+1.8, text(L"\operatorname{bd}(\operatorname{conv} f(\overline{\Omega})+\mathbb{R}^2_+)",    :left,   12,"#483D8B"))	
+	annotate!(p, xc+0.4, yc+1.4, text(L"\operatorname{bd}(\operatorname{conv} f(\overline{\Omega})+\mathbb{R}^2_+ +\mathbf{B}(\mathbf{0},\epsilon))",    :left,   12,dark_palette[:dark_magenta]))
+	
+	
 end
 
+
+# ╔═╡ a5bde7fe-472a-46e5-9cab-494e9c945493
+let
+	xc,yc, r = 2.0,2.0,1.0
+	tr_corner_x,tr_corner_y=(6.4,5.0)
+	p = draw_example1(xc,yc, r; 
+					  show_center=false,
+					  tr_corner=(tr_corner_x,tr_corner_y)
+					 )
+	
+	annotate!(p, xc, yc+0.5, text(L"f(\mathcal{\Omega})", :center, 12))
+	θ_t = π/4
+	p_x = xc + r*cos(θ_t+π)
+	p_y = yc + r*sin(θ_t+π)
+	d = [cos(θ_t), sin(θ_t)]  # points toward the center
+	quiver!(p, [0.0], [0.0],
+	    quiver      = ([d[1]], [d[2]]),
+	    arrow       = true,
+	    linewidth   = 1.2,
+	    linecolor   = :blue,
+	    linestyle   = :dashdot,
+	)
+	annotate!(p, p_x-0.5,  p_y-0.5,  text(L"d",             :blue, 14))
+
+	scatter!(p, [0.0], [0.0];
+	    color      = :black,
+	    markersize = 4,
+	)
+	annotate!(p, -0.4,  -.2,  text(L"v=\mathbf{0}",             14))
+	b = dot(d, [p_x, p_y])
+	xs = [0.0;b/d[1]]
+	ys = (b .- d[1]*xs) ./ d[2]
+	plot!(p, xs, ys;
+	    linecolor  = :red,
+	    linestyle  = :dash,
+	    linewidth  = 2,
+	)
+	
+	pt_x, pt_y = b/d[1], b/d[2]
+	scatter!(p, [pt_x, 0.0], [0.0, pt_y];
+	    color      = :red,
+	    markersize = 4,
+	)
+	
+	annotate!(p, xc+2.8, yc+2.8, text(L"\mathcal{P}",    :left,   12))
+	annotate!(p, -0.3,  pt_y,  text(L"H",      :red,       14))
+end
+
+# ╔═╡ 7a491a11-2b36-41f5-84d7-ed02d8d5326e
+let
+	# max(tr_corner_x,max_x)
+	
+	xc,yc, r = 2.0,2.0,1.0
+	tr_corner_x,tr_corner_y=(6.4,5.0)
+	X,Ptitle = if steps=="3"
+	X1 = [1.0  2.0  1.29289  1.6398   1.06712  1.55167
+ 2.0  1.0  1.29289  1.06712  1.6398   1.10613]
+		X1,L"P_5"
+	elseif steps == "2"	
+		d = [1.0;1.0]
+	θ_t = π/4
+	v_x = xc + r*cos(θ_t+π)
+	v_y = yc + r*sin(θ_t+π)
+	v = [v_x;v_y]
+	b = dot(d,v)
+	xs = [1;(b .- d[2]*1) / d[1]]
+	ys = [(b .- d[1]*1) / d[2];1]
+	X1 = [xs';ys']
+		X1,L"P_1"
+	else
+		[1.0;1.0],L"P_0"
+	end
+	steps
+	p = sortperm(X[1, :])  
+	X_sorted=X[:,p]
+	p1 = draw_outer(X_sorted[1,:],X_sorted[2,:],tr_corner=(6.4,5.0))
+	p = draw_example1(xc,yc, r; 
+					  upper_image=false,
+					  show_center=false,
+					  tr_corner=(tr_corner_x,tr_corner_y),
+					  initial_plot=p1
+					 )
+	
+	# 5) add the two text labels
+	annotate!(p, tr_corner_x-0.5, tr_corner_y-0.5, text(L"%$(Ptitle)", :center, 12))
+	
+end
 
 # ╔═╡ 66ffc650-93e6-4705-8212-7958f75bb1e1
 begin
@@ -735,7 +1067,7 @@ For demonstration, we consider the following example. Let ``x\in\mathbb{R}^2`` a
 \begin{array}{ll}
 \min_{\mathbb{R}^2_+} & x \\
 \textrm{subject to}
-&  \|x-\mathbb{1}\|_2^2 \leq 1
+&  \|x-\mathbb{2}\|_2^2 \leq 1
 \end{array}
 ```
 
@@ -931,6 +1263,29 @@ is a __supporting hyperplane__ for ``\mathcal{P}`` at ``y^*=v+z^* d`` and
 ``` 
 """
 
+# ╔═╡ f8ee59ea-0832-4d0e-bd51-50bf8b63e222
+cm"""
+$(ex("Remarks","Some Geometry"))
+Let ``S \subseteq \mathbb{R}^m`` be a convex set. 
+
+> A __hyperplane__ given by ``\left\{y \in \mathbb{R}^m \mid a^{\top} y=b\right\}`` for some ``a \in \mathbb{R}^m \backslash\{0\}, b \in \mathbb{R}`` is a __supporting hyperplane__ of ``S`` if ``S \subseteq\left\{y \in \mathbb{R}^m \mid a^{\top} y \geq b\right\}`` and there exists ``s \in S`` with ``a^{\top} s=b``. 
+
+> A convex subset ``F \subseteq S`` is called a __face__ of ``S`` if ``\lambda x+(1-\lambda) y \in F \text{ with } x, y \in S \text{ and } 0<\lambda<1\Rightarrow x, y \in F.``
+
+> A zero-dimensional face is an __extreme point (or vertex)__.
+
+> A one-dimensional face is an __edge__ of ``S``. 
+
+> A recession direction ``z \in \mathbb{R}^m \backslash\{0\}`` of convex set ``S`` is said to be an __extreme direction__ of ``S`` if ``\left\{v+r z \in \mathbb{R}^m \mid r \geq 0\right\}`` is a face for some extreme point ``v`` of ``S``
+
+
+> A vector ``z \in \mathbb{R}^m \backslash\{0\}`` is a __recession direction__ of ``S``, if ``y+\gamma z \in S`` for all ``\gamma \geq 0, y \in S``. The set of all recession directions of ``S`` is the recession cone of ``S``.
+
+> The __problem of finding the set of all vertices and extreme directions__ of a polyhedral convex set S, given its halfspace representation is called the __vertex enumeration problem__. In our implementation, we used __`Polyhedra.jl`__ which is julia package for polyhedra manipulations.
+
+"""
+
+
 # ╔═╡ e7657c9d-1ff1-46c8-a19e-99329474cae8
 @htl("""
 <style>
@@ -942,6 +1297,10 @@ ul {
 
 ul li:before {
   content: '▶ ';
+}
+
+ul li li:before {
+  content: '◼';
 }
 
 .p40 {
@@ -999,6 +1358,7 @@ example-box {
 # ╟─8c4c7c31-e590-4ff5-bc7b-f14d15293980
 # ╟─dc6dbd80-444f-4697-ad54-476b16cd5fe6
 # ╟─f23b7d03-2a80-492f-b933-317f735ec553
+# ╟─c84c7d54-89b8-481e-9b2b-26ede92942f6
 # ╟─57b118d7-a7dd-4f57-95e3-ef7d3fc334bf
 # ╟─9f14a6ae-8756-4059-a984-3b935ff598a0
 # ╟─764259e7-1d76-495b-8553-89f72caf3e46
@@ -1006,12 +1366,12 @@ example-box {
 # ╟─871cf958-6093-4004-99fd-ead3a2561e50
 # ╟─647e1f03-9a12-4239-b649-8d9aabbaa7c2
 # ╟─3bf3f0c2-496f-41b5-b2bc-0c0cb7b6feab
-# ╟─d9c32ddb-9922-4b73-882d-bc353e0dd761
+# ╠═d9c32ddb-9922-4b73-882d-bc353e0dd761
 # ╟─bb397f1a-1cde-4e83-afe3-e9dbad4a485f
 # ╟─035fe90d-6c65-4a6a-b345-10d44e12b131
 # ╟─a707080d-33ef-4dda-b2a3-72a23dc90db3
 # ╟─58d3a13b-87cd-481c-a208-7259607b034c
-# ╟─5b0e766a-28fd-467d-8c70-717730ec47ef
+# ╠═5b0e766a-28fd-467d-8c70-717730ec47ef
 # ╟─1c060d79-1857-495b-994a-90273540afde
 # ╟─6c7366ee-895d-46b6-ba30-7604ba6213a9
 # ╟─fcb71315-2400-4c64-89ed-a68de52c2cbd
@@ -1023,11 +1383,23 @@ example-box {
 # ╟─cca4e694-eca3-46d3-ac0b-19392f9060a6
 # ╟─e63032ba-c53b-4e92-91eb-f611ceb89903
 # ╟─39da7d26-392c-4d69-b4c9-59876257c657
-# ╟─a5bde7fe-472a-46e5-9cab-494e9c945493
+# ╠═a5bde7fe-472a-46e5-9cab-494e9c945493
 # ╟─f9a1dfe1-bc71-42c4-a6e8-3f422eba7507
 # ╟─e3f5835c-18fc-4f00-92f5-e55598e68081
 # ╟─c6db5f72-a8fa-481c-85e9-7c587e0589b4
-# ╠═34c3882f-2178-40f8-80b8-e3f019e5284e
-# ╟─59a80010-21a8-11f0-2aaa-5528a16a7081
+# ╟─f8ee59ea-0832-4d0e-bd51-50bf8b63e222
+# ╟─574605cb-46c1-4470-b4aa-b4a5e6fe6f8a
+# ╟─456f82ae-67de-4050-8d47-e1c106bdd5d1
+# ╟─22e078de-0f08-4dd9-bb15-333f5cd7f22b
+# ╟─b5d6e08e-318b-4f30-96c3-fe096f6da8dd
+# ╟─7a491a11-2b36-41f5-84d7-ed02d8d5326e
+# ╟─e4ed7740-d159-4d35-a50a-038cd7ac184b
+# ╟─a2d1d14d-c984-4cc6-9fc2-76365f3d9c2f
+# ╟─a631fd0c-b9b6-444a-8af9-7dbe8bc7fda4
+# ╟─34c3882f-2178-40f8-80b8-e3f019e5284e
+# ╟─d71e0ae6-a621-4738-9683-443b4043e371
+# ╟─3c5c8346-86f7-4309-a476-43a35a50f8bc
+# ╠═d899a2e5-ed49-4bee-9dad-a7934ea5d560
+# ╠═59a80010-21a8-11f0-2aaa-5528a16a7081
 # ╟─66ffc650-93e6-4705-8212-7958f75bb1e1
 # ╟─e7657c9d-1ff1-46c8-a19e-99329474cae8
