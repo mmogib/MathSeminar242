@@ -266,22 +266,8 @@ end
 # ╔═╡ 453c1441-2b72-4650-a317-56aec0def692
 md"## Choosing A Direction"
 
-# ╔═╡ f82ea70e-0c04-4275-afbf-4cff107940bf
-cm"""
-1. __Fixed Direction__.
-1. __Adjacent vertices-based approach__
-2. __Ideal point-based approach__
-"""
-
 # ╔═╡ 44580f32-df76-484b-9d2f-d09723747e66
 md"## Choosing A Vertex"
-
-# ╔═╡ a9a7ac5b-6f09-4c90-a867-aee556f27c26
-cm"""
-1. __Vertex selection with clusters__
-2. __Vertex selection with adjacency information__
-3. __Vertex selection using local upper bounds__
-"""
 
 # ╔═╡ ef9f9816-74df-4d2d-ac27-12ccd4c1c755
 md"## Convergence analysis"
@@ -310,8 +296,10 @@ proved that for an arbitrary norm used in the scalarization models,
 md"## Unbounded Problems"
 
 # ╔═╡ 1b20ac49-8453-4f55-89d8-b1e50b3cd85d
-cm""""
-- As far as I know, for some __unbounded problems__ such __polyhedral approximations__ do not exist.
+cm"""
+- As far as I know, for some __unbounded problems__ such __polyhedral approximations__ do not exist. 
+- Recently, Wagner et. al. (Algorithms to Solve Unbounded Convex Vector Optimization Problems. (n.d.). https://doi.org/10.1137/22M1507693 (2023)), proposed a __generalized solution concept__, called an (ε, δ)–solution, that allows also to consider unbounded CVOPs. It is based on additionally bounding the recession cones of the inner and outer polyhedral approximations of the upper image in a meaningful way.
+
 """
 
 # ╔═╡ e4ed7740-d159-4d35-a50a-038cd7ac184b
@@ -409,7 +397,95 @@ begin
     :dark_magenta      => "#8B008B",
     :charcoal          => "#2E2E3A"
 )
-	md""
+	md"colors"
+end
+
+# ╔═╡ 21178e30-da36-4426-95c7-03e1a291e6cf
+let
+	theme(:wong2)  # or your favorite light theme
+	Q = [0 -1;1 0.0]
+	v0 = [1.0;4.0]
+	v1 = [1.0,3]
+	v2 = [2.0; 2.0]
+	v3 = [2.8; 1.8]
+	v4 = [3.8; 1.8]
+	
+	vs =hcat(v0,v1,v2,v3,v4)
+	p = plot(
+		vs[1,1:2],
+		vs[2,1:2],
+		color   		= dark_palette[:charcoal],
+		label 			= "",
+		xlims 			= (-0.2,5),
+		ylims 			= (-0.2,5)
+	)
+	p = plot(p,
+		vs[1,[1,3]],
+		vs[2,[1,3]],
+		color   		= :red,
+		label 			= "",
+		xlims 			= (-0.2,5),
+		ylims 			= (-0.2,5),
+		linestyle 		= :dash
+	)
+	p = plot(p,
+		vs[1,2:3],
+		vs[2,2:3],
+		color   		= dark_palette[:charcoal],
+		xlabel 			= L"f_1",
+		ylabel 			= L"f_2",
+		frame_style 	= :origin,
+		marker 			= :circle,
+		label 			= ""
+	)
+	p = plot(p,
+		vs[1,[2,4]],
+		vs[2,[2,4]],
+		color   		= :red,
+		label 			= "",
+		xlims 			= (-0.2,5),
+		ylims 			= (-0.2,5),
+		linestyle 		= :dash
+	)
+	p = plot(p,
+		vs[1,3:4],
+		vs[2,3:4],
+		color   		= dark_palette[:charcoal],
+		marker 			= :circle,
+		label 			= ""
+	)
+	p = plot(p,
+		vs[1,4:5],
+		vs[2,4:5],
+		color   		= dark_palette[:charcoal],
+		label 			= ""
+	)
+	d = Q*(v3-v1)
+	d = d/norm(d)
+	quiver!(
+	  [v2[1]], [v2[2]],                    # starting point
+	  quiver = ([d[1]], [d[2]]),         # δx = 1, δy = 1
+	  arrow = :arrow,              # draw arrowheads
+	  linecolor = :blue,
+	  linewidth = 2,
+	)
+	d = v2-v0
+	d = d/(norm(d))
+	d = Q * d
+	quiver!(
+	  [v1[1]], [v1[2]],                    # starting point
+	  quiver = ([d[1]], [d[2]]),         # δx = 1, δy = 1
+	  arrow = :arrow,              # draw arrowheads
+	  linecolor = :blue,
+	  linewidth = 2,
+	)
+	
+	# ── 8) Label the translated plane and the region ──
+	annotate!(p, 1., 4.5,    text(L"v_1 + e_2", :red, 14))
+	annotate!(p, v1[1]-0.2, v1[2],    text(L"v_1 ", :red, 14))
+	annotate!(p, v2[2]-0.2, v2[2],    text(L"v_2 ", :red, 14))
+	annotate!(p, v3[1], v3[2]-.2,    text(L"v_3 ", :red, 14))
+	
 end
 
 # ╔═╡ d71e0ae6-a621-4738-9683-443b4043e371
@@ -981,6 +1057,48 @@ let
 	
 end
 
+# ╔═╡ 8ed44706-8692-4a13-8363-a06b29a4dc0b
+begin
+	function header_colored(header; color="8B008B;")
+		cm"""
+<div style="color: #8B008B;">
+
+__$(header)__
+
+</div>"""
+
+	end
+	cm"fns"
+end
+
+# ╔═╡ f82ea70e-0c04-4275-afbf-4cff107940bf
+cm"""
+$(header_colored("Fixed Direction"))
+Choose a fixed ``d\in \operatorname{int} C`` for the duration of the algorithm.
+
+$(header_colored("Adjacent vertices-based approach"))
+The __double description method__ is used to solve the vertex enumeration problem; namely
+```math
+\text{Compute the set of vertices }V_{k+1} \text{ of } P_{k+1}.
+```
+
+the sets of adjacent vertices for each vertex are also returned. We use this information to compute the direction parameter for a given vertex.
+
+"""
+
+# ╔═╡ a9a7ac5b-6f09-4c90-a867-aee556f27c26
+cm"""
+$(header_colored("Vertex selection with clusters"))
+This vertex selection rule clusters the vertices of the current outer approximation and visits these clusters sequentially. The motivation is to __ensure that the vertices from different regions of the outer approximation are selected in a balanced fashion.__
+
+
+$(header_colored("Vertex selection with adjacency information"))
+`Polyhedra.jl` package returns the __adjacency information for the vertices of the outer approximation__. We use this to detect 'isolated' vertices of the current outer approximation. The motivation is to __obtain uniformity among the vertices of the outer approximation and consequently, the ``C``-minimal points found on the boundary of the upper image as long as the geometry allows.__
+
+$(header_colored("Vertex selection using local upper bounds"))
+This selection rule can only be used for ``C=\mathbb{R}_{+}^m``. It is motivated by __split algorithms__, which are originally designed to solve multiobjective integer programming problem. The main idea is to __find a set of local upper bounds for the nondominated points and use them to select a vertex.__
+"""
+
 # ╔═╡ 66ffc650-93e6-4705-8212-7958f75bb1e1
 begin
     function add_space(n=1)
@@ -1095,7 +1213,7 @@ We consider the following optimization problem
 ```
 
 where
-- ``\displaystyle f:\mathbb{R}^n \to \mathbb{R}^m`` is __convex__.
+- ``\displaystyle f:\mathbb{R}^n \to \mathbb{R}^m`` is __continuous__ and __convex__.
 - ``\displaystyle \Omega \subseteq \mathbb{R}^n`` is __convex__.
 - ``\displaystyle C \subseteq \mathbb{R}^m`` is a __closed, convex, pointed__ cone with __nonempty interior__.
 
@@ -1343,6 +1461,34 @@ $(bth(""))
 When terminates, Previous Algorithm returns a __finite weak ``\epsilon``-solution__.
 """
 
+# ╔═╡ 4a48611c-65e7-4f14-b88c-5e3a9c7d120d
+cm"""
+$(header_colored("Ideal point-based approach"))
+$(define("The ideal point"))
+The ideal point denoted by ``y^{\mathcal{I}} \in \mathbb{R}^m`` and defined as 
+```math
+y_i^{\mathcal{I}}:=\inf \left\{f_i(x) \mid x \in \Omega\right\} \quad \text{for } i=1, \ldots, m.
+```
+
+- For this approach, we assume that the ordering cone is ``\mathbb{R}_{+}^m``, hence the ideal point ``y^{\mathcal{I}}`` is well defined. 
+
+> For a vertex ``v`` of the current outer approximation, we consider the vector ``v-y^{\mathcal{I}}``. 
+
+- Note that for the initial iteration, we have ``v-y^{\mathcal{I}}=0``. 
+
+- In the subsequent iterations, we obtain ``v-y^{\mathcal{I}} \geq 0`` since ``P^k \subseteq P^0`` for any ``k`` throughout the algorithm. 
+
+- For ``i \in\{1, \ldots, m\}``, we define 
+```math 
+d_i=\frac{1}{v_i-y_i^l+\bar{\epsilon}}\text{ for some sufficiently small }\bar{\epsilon} > 0,
+```
+$(add_space(10))which is added for computational convenience. 
+
+- Then ``d`` is normalized such that ``\|d\|=1``. 
+
+> Geometrically, this corresponds to considering the points ``\left(v_i-y_i^{\mathcal{I}}\right) e_i`` for each ``i \in\{1, \ldots, m\}`` and taking the normal direction of the hyperplane passing through them.
+"""
+
 # ╔═╡ e7657c9d-1ff1-46c8-a19e-99329474cae8
 @htl("""
 <style>
@@ -1440,7 +1586,7 @@ example-box {
 # ╟─cca4e694-eca3-46d3-ac0b-19392f9060a6
 # ╟─e63032ba-c53b-4e92-91eb-f611ceb89903
 # ╟─39da7d26-392c-4d69-b4c9-59876257c657
-# ╠═a5bde7fe-472a-46e5-9cab-494e9c945493
+# ╟─a5bde7fe-472a-46e5-9cab-494e9c945493
 # ╟─f9a1dfe1-bc71-42c4-a6e8-3f422eba7507
 # ╟─e3f5835c-18fc-4f00-92f5-e55598e68081
 # ╟─c6db5f72-a8fa-481c-85e9-7c587e0589b4
@@ -1453,19 +1599,22 @@ example-box {
 # ╟─7950a01e-48bb-4094-9842-a7dd828ceda6
 # ╟─453c1441-2b72-4650-a317-56aec0def692
 # ╟─f82ea70e-0c04-4275-afbf-4cff107940bf
+# ╟─21178e30-da36-4426-95c7-03e1a291e6cf
+# ╟─4a48611c-65e7-4f14-b88c-5e3a9c7d120d
 # ╟─44580f32-df76-484b-9d2f-d09723747e66
 # ╟─a9a7ac5b-6f09-4c90-a867-aee556f27c26
 # ╟─ef9f9816-74df-4d2d-ac27-12ccd4c1c755
 # ╟─513d75b6-63ea-40f4-89b1-f1c79ac83c88
 # ╟─cf460cb7-9367-4b7b-b2bb-fdb76c1e70f6
-# ╠═1b20ac49-8453-4f55-89d8-b1e50b3cd85d
+# ╟─1b20ac49-8453-4f55-89d8-b1e50b3cd85d
 # ╟─e4ed7740-d159-4d35-a50a-038cd7ac184b
 # ╟─a2d1d14d-c984-4cc6-9fc2-76365f3d9c2f
 # ╟─a631fd0c-b9b6-444a-8af9-7dbe8bc7fda4
 # ╟─34c3882f-2178-40f8-80b8-e3f019e5284e
 # ╟─d71e0ae6-a621-4738-9683-443b4043e371
 # ╟─3c5c8346-86f7-4309-a476-43a35a50f8bc
-# ╠═d899a2e5-ed49-4bee-9dad-a7934ea5d560
-# ╠═59a80010-21a8-11f0-2aaa-5528a16a7081
+# ╟─d899a2e5-ed49-4bee-9dad-a7934ea5d560
+# ╟─59a80010-21a8-11f0-2aaa-5528a16a7081
+# ╟─8ed44706-8692-4a13-8363-a06b29a4dc0b
 # ╟─66ffc650-93e6-4705-8212-7958f75bb1e1
 # ╟─e7657c9d-1ff1-46c8-a19e-99329474cae8
