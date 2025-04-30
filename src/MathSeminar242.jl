@@ -263,6 +263,57 @@ begin
 	# """
 end
 
+# ╔═╡ 453c1441-2b72-4650-a317-56aec0def692
+md"## Choosing A Direction"
+
+# ╔═╡ f82ea70e-0c04-4275-afbf-4cff107940bf
+cm"""
+1. __Fixed Direction__.
+1. __Adjacent vertices-based approach__
+2. __Ideal point-based approach__
+"""
+
+# ╔═╡ 44580f32-df76-484b-9d2f-d09723747e66
+md"## Choosing A Vertex"
+
+# ╔═╡ a9a7ac5b-6f09-4c90-a867-aee556f27c26
+cm"""
+1. __Vertex selection with clusters__
+2. __Vertex selection with adjacency information__
+3. __Vertex selection using local upper bounds__
+"""
+
+# ╔═╡ ef9f9816-74df-4d2d-ac27-12ccd4c1c755
+md"## Convergence analysis"
+
+# ╔═╡ 513d75b6-63ea-40f4-89b1-f1c79ac83c88
+cm"""
+If (PS(v,d)) is replaced by the __norm minimization scalarization__
+```math
+\begin{array}{ll}
+\min & \|z\| \\
+\text { subject to } \\
+& f(x) \leq_C v + z\\
+& x \in \mathcal{\Omega}\\
+& z \in \mathbb{R}^m\\
+\end{array}\tag{NM(v)}
+```
+
+> Ararat et. al. in __Convergence Analysis of a Norm Minimization-Based Convex Vector Optimization Algorithm. (n.d.). https://doi.org/10.1137/23M1574580 (2024)__
+proved that for an arbitrary norm used in the scalarization models, 
+> - the approximation error after ``k`` iterations decreases by the order of ``\mathcal{O}\left(k^{1 /(1-m)}\right)``, where ``m`` is the dimension of the objective space. 
+> - in the case of the Euclidean norm convergence rate of ``\mathcal{O}\left(k^{2 /(1-m)}\right)``.
+
+"""
+
+# ╔═╡ cf460cb7-9367-4b7b-b2bb-fdb76c1e70f6
+md"## Unbounded Problems"
+
+# ╔═╡ 1b20ac49-8453-4f55-89d8-b1e50b3cd85d
+cm""""
+- As far as I know, for some __unbounded problems__ such __polyhedral approximations__ do not exist.
+"""
+
 # ╔═╡ e4ed7740-d159-4d35-a50a-038cd7ac184b
 # let
 # 	# max(tr_corner_x,max_x)
@@ -1286,6 +1337,12 @@ Let ``S \subseteq \mathbb{R}^m`` be a convex set.
 """
 
 
+# ╔═╡ 7950a01e-48bb-4094-9842-a7dd828ceda6
+cm"""
+$(bth(""))
+When terminates, Previous Algorithm returns a __finite weak ``\epsilon``-solution__.
+"""
+
 # ╔═╡ e7657c9d-1ff1-46c8-a19e-99329474cae8
 @htl("""
 <style>
@@ -1393,6 +1450,15 @@ example-box {
 # ╟─22e078de-0f08-4dd9-bb15-333f5cd7f22b
 # ╟─b5d6e08e-318b-4f30-96c3-fe096f6da8dd
 # ╟─7a491a11-2b36-41f5-84d7-ed02d8d5326e
+# ╟─7950a01e-48bb-4094-9842-a7dd828ceda6
+# ╟─453c1441-2b72-4650-a317-56aec0def692
+# ╟─f82ea70e-0c04-4275-afbf-4cff107940bf
+# ╟─44580f32-df76-484b-9d2f-d09723747e66
+# ╟─a9a7ac5b-6f09-4c90-a867-aee556f27c26
+# ╟─ef9f9816-74df-4d2d-ac27-12ccd4c1c755
+# ╟─513d75b6-63ea-40f4-89b1-f1c79ac83c88
+# ╟─cf460cb7-9367-4b7b-b2bb-fdb76c1e70f6
+# ╠═1b20ac49-8453-4f55-89d8-b1e50b3cd85d
 # ╟─e4ed7740-d159-4d35-a50a-038cd7ac184b
 # ╟─a2d1d14d-c984-4cc6-9fc2-76365f3d9c2f
 # ╟─a631fd0c-b9b6-444a-8af9-7dbe8bc7fda4
